@@ -33,7 +33,7 @@ It's the html report knit from the RMD file.
 
 It's the slides for in-class presentation
 
---report_revised.html
+--report_1_revised.html
 
 It's the revised research proposal based on feedback from Deb.
 
