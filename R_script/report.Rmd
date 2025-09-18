@@ -1,0 +1,268 @@
+---
+title: "Report"
+author: "Peter Yin"
+date: "2025-09-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# Source helpers + analysis so all objects are available in this document
+source("globals.R",       local = knitr::knit_global())  # cookbook recommends knit_global()
+source("analysis_main.R", local = knitr::knit_global())
+```
+
+# Hypotheses
+
+
+## H1 (Higher Overall Volatility): The average stock market volatility during Trump’s presidency was significantly higher than during the Clinton, Bush, and Obama presidencies. Volatility will be measured by the VIX index level and the realized standard deviation of daily S&P 500 returns.
+
+
+
+
+
+```{r echo=FALSE}
+plot_start <- as.Date("2016-11-01"); plot_end <- as.Date("2021-01-20")
+
+shade_df <- panel %>%
+  dplyr::filter(tweet_day == 1L, date >= plot_start, date <= plot_end) %>%
+  dplyr::transmute(xmin = date - 0.5, xmax = date + 0.5, ymin = -Inf, ymax = Inf)
+
+plot_df <- panel %>%
+  dplyr::filter(date >= plot_start, date <= plot_end) %>%
+  dplyr::transmute(date, `VIX` = VIX, `|SPY Return|` = abs_ret, `Realized Vol (GK)` = rvol_gk) %>%
+  tidyr::pivot_longer(-date, names_to = "Series", values_to = "Value")
+
+p_ts <- ggplot2::ggplot(plot_df, ggplot2::aes(x = date, y = Value)) +
+  ggplot2::geom_rect(data = shade_df,
+                     ggplot2::aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+                     inherit.aes = FALSE, fill = "grey75", alpha = 0.25) +
+  ggplot2::geom_line(linewidth = 0.4) +
+  ggplot2::facet_wrap(~ Series, ncol = 1, scales = "free_y") +
+  ggplot2::labs(title = "VIX, |SPY Return|, Realized Vol (GK)\nShaded: market-sensitive tweet days",
+                x = NULL, y = NULL) +
+  ggplot2::theme_minimal(base_size = 12) +
+  ggplot2::theme(panel.grid.minor = ggplot2::element_blank())
+p_ts
+
+```
+
+--Spikes are clustered around policy news cycles and the 2020 COVID shock; tweet-day shading lines up with many local upticks in |returns| and realized vol. This is visual context that communications and policy flow co-move with day-to-day risk, even if Trump’s average volatility isn’t the sample maximum. (Event-study logic: look for jumps at/just after events.)
+
+```{r echo=FALSE}
+
+h1_summ %>%
+  kableExtra::kbl(caption = "H1: Mean VIX & realized vol (GK) by presidency") %>%
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
+--Trump’s average VIX (18.25) and realized volatility (GK, 0.00693) are not the highest in the sample. Both Bush (VIX≈20.88; RV≈0.00977) and Obama (VIX≈19.44) are higher on at least one volatility metric. That’s a first signal against H1 as stated. 
+
+
+```{r echo=FALSE}
+
+s_hac(m_vix, 10)
+s_hac(m_rv,  10)
+```
+
+--The presidency dummies in my regression section formalize the differences. We can see that the “pres4Trump” coefficient isn’t significantly above Clinton (base), that’s further evidence to reject H1.
+
+
+
+## H2 (Higher Trading Volume): Average market trading volume was higher under Trump than under prior administrations. Additionally, the frequency of extreme volume days (e.g., daily volume above the 95th percentile of the pre-2017 distribution) was greater during Trump’s term.
+
+
+```{r echo=FALSE}
+
+h2_means %>%
+  kableExtra::kbl(caption = "H2: Mean volume and share of extreme-volume days") %>%
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
+
+--Mean volume is slightly higher in Trump’s term (≈84.7M vs 83.6M shares), consistent with the first clause in H2.
+
+--Using my pre-2017 95th-percentile threshold, the extreme-day frequency is lower in Trump’s term (≈1.39%) than outside it (≈4.29%). That’s the opposite of H2’s “more extremes” clause and likely reflects the threshold definition and time trends in SPY volume; worth sensitivity checks (e.g., rolling thresholds, log-volume z-scores).
+
+```{r echo=FALSE}
+
+s_hac(m_lvol,    10)
+s_hac(m_extreme, 10)
+```
+
+--Focus on the Trump dummy: a positive and significant coefficient in the log(volume) model would support “higher average volume.” For the LPM on extreme days, significance and sign decide the “more extremes” clause. Use HAC-robust inference (Newey–West).
+
+
+## H3 (Sector Disparities): Trade- and deregulation-sensitive sectors (e.g., technology, industrials, financials) experienced larger increases in volatility and volume during Trump’s term relative to: (a) more defensive sectors (e.g., consumer staples, utilities) in the same period, and (b) the same sectors’ performance under previous presidents.
+
+
+```{r echo=FALSE}
+
+s_hac(m_h3_vol, 10)
+s_hac(m_h3_vty, 10)
+```
+
+--In log(volume), the interaction Trump:trade is large and negative (≈ −0.387, ***), indicating that, relative to defensive sectors and earlier periods, trade-sensitive ETFs saw smaller volume increases (or larger decreases) during Trump’s term. That runs against H3’s “larger increases” for trade-sensitive sectors. 
+
+--In |return| (volatility), the Trump:trade row (the coefficient drives the DiD result) is significant, indicating that the sector gap in volatility is strong; And it is negative, meaning it cuts against H3; 
+
+--Interpretations should note sector FEs and seasonality controls (DOW/MON). Any conclusions here are within-ETF (XLF, XLI, XLK vs XLP, XLU) comparisons, not stock-level microstructure.
+
+
+
+## H4 (Impact of Presidential Tweets): Market-related communications from President Trump – in particular, tweets mentioning companies, policies, or economic issues – caused significant short-term market reactions, evidenced by abnormal returns, volatility jumps, or unusual trading volume immediately following the tweet.
+
+
+```{r echo=FALSE}
+panel_trump <- panel_trump %>%
+  dplyr::mutate(
+    tweet_lbl = factor(tweet_day, labels = c("Non-tweet day","Tweet day")),
+    tweet_bin = dplyr::case_when(
+      tweet_count == 0 ~ "0",
+      tweet_count %in% 1:2 ~ "1–2",
+      tweet_count >= 3 ~ "3+"
+    )
+  )
+
+vio_long <- panel_trump %>%
+  dplyr::transmute(tweet_lbl, VIX = VIX, `|SPY Return|` = abs_ret, `Realized Vol (GK)` = rvol_gk) %>%
+  tidyr::pivot_longer(-tweet_lbl, names_to = "Metric", values_to = "Value") %>%
+  dplyr::mutate(
+    Metric = factor(replace(as.character(Metric),
+                            Metric == "|SPY Return|", "|SPY Return| (%, abs)"),
+                    levels = c("VIX","|SPY Return| (%, abs)","Realized Vol (GK)")),
+    Value_plot = ifelse(Metric == "|SPY Return| (%, abs)", 100 * Value, Value)
+  )
+
+p_vio_tt <- ggplot2::ggplot(vio_long, ggplot2::aes(x = tweet_lbl, y = Value_plot, fill = tweet_lbl)) +
+  ggplot2::geom_violin(trim = TRUE, alpha = 0.45, colour = NA) +
+  ggplot2::geom_boxplot(width = 0.12, outlier.alpha = 0.15, fill = "white") +
+  ggplot2::stat_summary(fun = median, geom = "point", shape = 23, size = 2, fill = "white") +
+  ggplot2::facet_wrap(~ Metric, scales = "free_y") +
+  ggplot2::labs(title = "Tweet vs Non-tweet: distributions", x = NULL, y = NULL, fill = NULL) +
+  ggplot2::theme_minimal(base_size = 12) +
+  ggplot2::theme(legend.position = "none")
+p_vio_tt
+
+
+```
+
+--The violins show fatter upper tails on tweet days and as tweet counts rise, echoing the tables: more mass in higher |return| / RV regions. That’s the graphical counterpart to the event-window summaries.
+
+```{r echo=FALSE}
+vio_bins <- panel_trump %>%
+  dplyr::transmute(tweet_bin = factor(tweet_bin, levels = c("0","1–2","3+")),
+                   VIX = VIX, `|SPY Return|` = abs_ret, `Realized Vol (GK)` = rvol_gk) %>%
+  tidyr::pivot_longer(-tweet_bin, names_to = "Metric", values_to = "Value") %>%
+  dplyr::mutate(
+    Metric = factor(replace(as.character(Metric),
+                            Metric == "|SPY Return|", "|SPY Return| (%, abs)"),
+                    levels = c("VIX","|SPY Return| (%, abs)","Realized Vol (GK)")),
+    Value_plot = ifelse(Metric == "|SPY Return| (%, abs)", 100 * Value, Value)
+  )
+
+p_vio_bins <- ggplot2::ggplot(vio_bins, ggplot2::aes(x = tweet_bin, y = Value_plot, fill = tweet_bin)) +
+  ggplot2::geom_violin(trim = TRUE, alpha = 0.45, colour = NA) +
+  ggplot2::geom_boxplot(width = 0.12, outlier.alpha = 0.15, fill = "white") +
+  ggplot2::stat_summary(fun = median, geom = "point", shape = 23, size = 2, fill = "white") +
+  ggplot2::facet_wrap(~ Metric, scales = "free_y") +
+  ggplot2::labs(title = "By tweet intensity (0 / 1–2 / 3+)", x = "Tweets per day", y = NULL, fill = NULL) +
+  ggplot2::theme_minimal(base_size = 12) +
+  ggplot2::theme(legend.position = "none")
+p_vio_bins
+
+```
+
+
+```{r echo=FALSE}
+
+panel_trump %>%
+  dplyr::group_by(tweet_day) %>%
+  dplyr::summarise(
+    N_days = dplyr::n(),
+    mean_VIX = mean(VIX, na.rm=TRUE), sd_VIX = sd(VIX, na.rm=TRUE), median_VIX = stats::median(VIX, na.rm=TRUE),
+    mean_abs_ret = mean(abs_ret, na.rm=TRUE), sd_abs_ret = sd(abs_ret, na.rm=TRUE), median_abs_ret = stats::median(abs_ret, na.rm=TRUE),
+    mean_rv_gk = mean(rvol_gk, na.rm=TRUE), sd_rv_gk = sd(rvol_gk, na.rm=TRUE), median_rv_gk = stats::median(rvol_gk, na.rm=TRUE),
+    mean_rv_rs = mean(rvol_rs, na.rm=TRUE), sd_rv_rs = sd(rvol_rs, na.rm=TRUE), median_rv_rs = stats::median(rvol_rs, na.rm=TRUE),
+    share_move_ge_2pct = mean(abs_ret >= 0.02, na.rm=TRUE),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(Group = dplyr::if_else(tweet_day==1L,"Tweet days","Non-tweet days")) %>%
+  dplyr::select(Group, dplyr::everything(), -tweet_day) %>%
+  kableExtra::kbl(caption = "H4: Tweet vs Non-tweet day summaries") %>%
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
+--On tweet days, the distribution of |returns| and realized vol shifts up versus non-tweet days (see medians and means). This is consistent with short-horizon turbulence on communication days. Use this as descriptive context; regressions below test it formally.
+
+
+```{r echo=FALSE}
+
+tweet_dates <- tweet_daily$date
+tweet_win1_dates <- unique(c(tweet_dates, tweet_dates + 1, tweet_dates - 1))
+
+panel_trump %>%
+  dplyr::mutate(in_win1 = as.integer(date %in% tweet_win1_dates)) %>%
+  dplyr::group_by(in_win1) %>%
+  dplyr::summarise(
+    N_days = dplyr::n(),
+    mean_VIX = mean(VIX, na.rm=TRUE), median_VIX = stats::median(VIX, na.rm=TRUE),
+    mean_abs_ret = mean(abs_ret, na.rm=TRUE), median_abs_ret = stats::median(abs_ret, na.rm=TRUE),
+    mean_rv_gk = mean(rvol_gk, na.rm=TRUE), median_rv_gk = stats::median(rvol_gk, na.rm=TRUE),
+    mean_rv_rs = mean(rvol_rs, na.rm=TRUE), median_rv_rs = stats::median(rvol_rs, na.rm=TRUE),
+    share_move_ge_2pct = mean(abs_ret >= 0.02, na.rm=TRUE),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(Group = dplyr::if_else(in_win1==1L,"±1-day window","Outside window")) %>%
+  dplyr::select(Group, dplyr::everything(), -in_win1) %>%
+  kableExtra::kbl(caption = "H4: ±1-day window vs outside") %>%
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
+--Inside the ±1-day window around market-sensitive tweets, mean |return| rises from ≈0.0057 (outside) to ≈0.0078 (inside), and the share of ≥2% absolute moves jumps from ≈2.84% to ≈7.59%. VIX and realized vol also move up in-window. That’s strong descriptive evidence of event-proximate market agitation.
+
+
+```{r echo=FALSE}
+
+panel_trump %>%
+  dplyr::group_by(tweet_bin) %>%
+  dplyr::summarise(
+    N_days = dplyr::n(),
+    mean_VIX = mean(VIX, na.rm=TRUE), median_VIX = stats::median(VIX, na.rm=TRUE),
+    mean_abs_ret = mean(abs_ret, na.rm=TRUE), median_abs_ret = stats::median(abs_ret, na.rm=TRUE),
+    mean_rv_gk = mean(rvol_gk, na.rm=TRUE), median_rv_gk = stats::median(rvol_gk, na.rm=TRUE),
+    mean_rv_rs = mean(rvol_rs, na.rm=TRUE), median_rv_rs = stats::median(rvol_rs, na.rm=TRUE),
+    .groups="drop"
+  ) %>%
+  dplyr::arrange(match(tweet_bin, c("0","1–2","3+"))) %>%
+  kableExtra::kbl(caption = "H4: By tweet intensity") %>%
+  kableExtra::kable_styling(full_width = FALSE)
+```
+
+
+--Moving from days with 0 market-sensitive tweets to 1–2 tweets, mean |return| and realized vol tick up (e.g., |ret| ≈0.00677 → ≈0.00765). The 3+ bucket (see table’s final rows) typically pushes higher again. This pattern fits a dose–response story.
+
+
+
+```{r echo=FALSE}
+
+s_hac(m_h4_abs,  5)
+s_hac(m_h4_rv,   5)
+s_hac(m_h4_lvol, 5)
+
+s_hac(m_h4w_abs,  5)
+s_hac(m_h4w_rv,   5)
+s_hac(m_h4w_lvol, 5)
+```
+
+--In the same-day models, a positive, significant tweet_day coefficient (for |ret|, RV, or log-volume) is direct evidence of communication-linked disturbances. In the ±1-day models, a significant in_win1 term indicates spillovers before/after the tweet day (anticipation/confirmation effects).
+
+
+```{r echo=FALSE}
+
+s_hac(m_ev_abs,  5)
+s_hac(m_ev_rv,   5)
+s_hac(m_ev_lvol, 5)
+```
+
+--In the same-day models, a positive, significant tweet_day coefficient (for |ret|, RV, or log-volume) is direct evidence of communication-linked disturbances. In the ±1-day models, a significant in_win1 term indicates spillovers before/after the tweet day (anticipation/confirmation effects).

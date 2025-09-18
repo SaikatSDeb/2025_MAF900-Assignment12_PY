@@ -1,0 +1,158 @@
+---
+title: "Volatility, Volume, Sectors, and Trump Tweets"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    code_folding: show
+---
+
+```{r all-in-one, message=FALSE, warning=FALSE, fig.width=8}
+# packages, helpers, HAC, presidency tagger, OHLC pull, nearest-event util
+source("globals.R", local = knitr::knit_global())   # cookbook rec. to use knit_global() :contentReference[oaicite:2]{index=2}
+
+# data prep + models (no plotting inside)
+source("analysis_main.R", local = knitr::knit_global())
+
+library(ggplot2); library(kableExtra); library(dplyr); library(tidyr)
+
+# ---------- PLOTS (moved out of analysis_main.R) ----------
+plot_start <- as.Date("2016-11-01"); plot_end <- as.Date("2021-01-20")
+
+# shaded TS: VIX, |SPY|, RV
+shade_df <- panel %>% filter(tweet_day == 1L, date >= plot_start, date <= plot_end) %>%
+  transmute(xmin = date - 0.5, xmax = date + 0.5, ymin = -Inf, ymax = Inf)
+plot_df <- panel %>%
+  filter(date >= plot_start, date <= plot_end) %>%
+  transmute(date, `VIX` = VIX, `|SPY Return|` = abs_ret, `Realized Vol (GK)` = rvol_gk) %>%
+  pivot_longer(-date, names_to = "Series", values_to = "Value")
+p_ts <- ggplot(plot_df, aes(x = date, y = Value)) +
+  geom_rect(data = shade_df, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+            inherit.aes = FALSE, fill = "grey75", alpha = 0.25) +
+  geom_line(linewidth = 0.4) +
+  facet_wrap(~ Series, ncol = 1, scales = "free_y") +
+  labs(title = "VIX, |SPY Return|, Realized Vol (GK)\nShaded: market-sensitive tweet days", x = NULL, y = NULL) +
+  theme_minimal(base_size = 12) + theme(panel.grid.minor = element_blank())
+print(p_ts)
+
+# tweet vs non-tweet violins
+panel_trump <- panel_trump %>%
+  mutate(tweet_lbl = factor(tweet_day, labels = c("Non-tweet day","Tweet day")),
+         tweet_bin = case_when(tweet_count == 0 ~ "0",
+                               tweet_count %in% 1:2 ~ "1–2",
+                               tweet_count >= 3 ~ "3+"))
+vio_long <- panel_trump %>%
+  transmute(tweet_lbl, VIX = VIX, `|SPY Return|` = abs_ret, `Realized Vol (GK)` = rvol_gk) %>%
+  pivot_longer(-tweet_lbl, names_to = "Metric", values_to = "Value") %>%
+  mutate(Metric = factor(replace(as.character(Metric),
+                                 Metric == "|SPY Return|", "|SPY Return| (%, abs)"),
+                         levels = c("VIX","|SPY Return| (%, abs)","Realized Vol (GK)")),
+         Value_plot = ifelse(Metric == "|SPY Return| (%, abs)", 100 * Value, Value))
+p_vio_tt <- ggplot(vio_long, aes(x = tweet_lbl, y = Value_plot, fill = tweet_lbl)) +
+  geom_violin(trim = TRUE, alpha = 0.45, colour = NA) +
+  geom_boxplot(width = 0.12, outlier.alpha = 0.15, fill = "white") +
+  stat_summary(fun = median, geom = "point", shape = 23, size = 2, fill = "white") +
+  facet_wrap(~ Metric, scales = "free_y") +
+  labs(title = "Tweet vs Non-tweet: distributions", x = NULL, y = NULL, fill = NULL) +
+  theme_minimal(base_size = 12) + theme(legend.position = "none")
+print(p_vio_tt)
+
+# violin by tweet intensity
+vio_bins <- panel_trump %>%
+  transmute(tweet_bin = factor(tweet_bin, levels = c("0","1–2","3+")),
+            VIX = VIX, `|SPY Return|` = abs_ret, `Realized Vol (GK)` = rvol_gk) %>%
+  pivot_longer(-tweet_bin, names_to = "Metric", values_to = "Value") %>%
+  mutate(Metric = factor(replace(as.character(Metric),
+                                 Metric == "|SPY Return|", "|SPY Return| (%, abs)"),
+                         levels = c("VIX","|SPY Return| (%, abs)","Realized Vol (GK)")),
+         Value_plot = ifelse(Metric == "|SPY Return| (%, abs)", 100 * Value, Value))
+p_vio_bins <- ggplot(vio_bins, aes(x = tweet_bin, y = Value_plot, fill = tweet_bin)) +
+  geom_violin(trim = TRUE, alpha = 0.45, colour = NA) +
+  geom_boxplot(width = 0.12, outlier.alpha = 0.15, fill = "white") +
+  stat_summary(fun = median, geom = "point", shape = 23, size = 2, fill = "white") +
+  facet_wrap(~ Metric, scales = "free_y") +
+  labs(title = "By tweet intensity (0 / 1–2 / 3+)", x = "Tweets per day", y = NULL, fill = NULL) +
+  theme_minimal(base_size = 12) + theme(legend.position = "none")
+print(p_vio_bins)
+
+# ---------- TABLES ----------
+results_tables <- list(
+  h1_summ = h1_summ,
+  h2_means = h2_means,
+  summ_same_day = {
+    panel_trump %>%
+      group_by(tweet_day) %>%
+      summarise(
+        N_days = n(),
+        mean_VIX = mean(VIX, na.rm=TRUE), sd_VIX = sd(VIX, na.rm=TRUE), median_VIX = median(VIX, na.rm=TRUE),
+        mean_abs_ret = mean(abs_ret, na.rm=TRUE), sd_abs_ret = sd(abs_ret, na.rm=TRUE), median_abs_ret = median(abs_ret, na.rm=TRUE),
+        mean_rv_gk = mean(rvol_gk, na.rm=TRUE), sd_rv_gk = sd(rvol_gk, na.rm=TRUE), median_rv_gk = median(rvol_gk, na.rm=TRUE),
+        mean_rv_rs = mean(rvol_rs, na.rm=TRUE), sd_rv_rs = sd(rvol_rs, na.rm=TRUE), median_rv_rs = median(rvol_rs, na.rm=TRUE),
+        share_move_ge_2pct = mean(abs_ret >= 0.02, na.rm=TRUE),
+        .groups = "drop"
+      ) %>%
+      mutate(Group = if_else(tweet_day==1L,"Tweet days","Non-tweet days")) %>%
+      select(Group, everything(), -tweet_day)
+  },
+  summ_win1 = {
+    tweet_dates <- tweet_daily$date
+    tweet_win1_dates <- unique(c(tweet_dates, tweet_dates + 1, tweet_dates - 1))
+    panel_trump %>%
+      mutate(in_win1 = as.integer(date %in% tweet_win1_dates)) %>%
+      group_by(in_win1) %>%
+      summarise(
+        N_days = n(),
+        mean_VIX = mean(VIX, na.rm=TRUE), median_VIX = median(VIX, na.rm=TRUE),
+        mean_abs_ret = mean(abs_ret, na.rm=TRUE), median_abs_ret = median(abs_ret, na.rm=TRUE),
+        mean_rv_gk = mean(rvol_gk, na.rm=TRUE), median_rv_gk = median(rvol_gk, na.rm=TRUE),
+        mean_rv_rs = mean(rvol_rs, na.rm=TRUE), median_rv_rs = median(rvol_rs, na.rm=TRUE),
+        share_move_ge_2pct = mean(abs_ret >= 0.02, na.rm=TRUE),
+        .groups = "drop"
+      ) %>%
+      mutate(Group = if_else(in_win1==1L,"±1-day window","Outside window")) %>%
+      select(Group, everything(), -in_win1)
+  },
+  summ_bins = {
+    panel_trump %>%
+      group_by(tweet_bin) %>%
+      summarise(
+        N_days = n(),
+        mean_VIX = mean(VIX, na.rm=TRUE), median_VIX = median(VIX, na.rm=TRUE),
+        mean_abs_ret = mean(abs_ret, na.rm=TRUE), median_abs_ret = median(abs_ret, na.rm=TRUE),
+        mean_rv_gk = mean(rvol_gk, na.rm=TRUE), median_rv_gk = median(rvol_gk, na.rm=TRUE),
+        mean_rv_rs = mean(rvol_rs, na.rm=TRUE), median_rv_rs = median(rvol_rs, na.rm=TRUE),
+        .groups="drop"
+      ) %>%
+      arrange(match(tweet_bin, c("0","1–2","3+")))
+  }
+)
+
+# print tables
+results_tables$h1_summ %>% kbl(caption = "H1: mean VIX & realized vol (GK) by presidency") %>% kable_styling(full_width = FALSE)
+results_tables$h2_means %>% kbl(caption = "H2: mean volume and extreme-volume share") %>% kable_styling(full_width = FALSE)
+results_tables$summ_same_day %>% kbl(caption = "H4: tweet vs non-tweet day summaries") %>% kable_styling(full_width = FALSE)
+results_tables$summ_win1 %   >% kbl(caption = "H4: ±1-day window vs outside") %>% kable_styling(full_width = FALSE)
+results_tables$summ_bins %    >% kbl(caption = "H4: by tweet intensity (0 / 1–2 / 3+)") %>% kable_styling(full_width = FALSE)
+
+# ---------- MODELS (HAC SEs) ----------
+cat("\n## H1 regressions\n")
+s_hac(m_vix, 10); s_hac(m_rv, 10)
+
+cat("\n## H2 regressions\n")
+s_hac(m_lvol, 10); s_hac(m_extreme, 10)
+
+cat("\n## H3 regressions\n")
+s_hac(m_h3_vol, 10); s_hac(m_h3_vty, 10)
+
+cat("\n## H4 regressions (same-day / ±1d)\n")
+s_hac(m_h4_abs, 5); s_hac(m_h4_rv, 5); s_hac(m_h4_lvol, 5)
+s_hac(m_h4w_abs, 5); s_hac(m_h4w_rv, 5); s_hac(m_h4w_lvol, 5)
+
+cat("\n## H4 event-time (baseline = day -1)\n")
+s_hac(m_ev_abs, 5); s_hac(m_ev_rv, 5); s_hac(m_ev_lvol, 5)
+
+# ---------- Commentary placeholders ----------
+cat("\n\n### Comment: H1 …\n")
+cat("\n\n### Comment: H2 …\n")
+cat("\n\n### Comment: H3 …\n")
+cat("\n\n### Comment: H4 …\n")

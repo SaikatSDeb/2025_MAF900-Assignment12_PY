@@ -1,0 +1,124 @@
+---
+title: "Revised Research Proposal: Presidential Communication, Political Risk, and U.S. Stock Market Volatility & Volume"
+author: "Peter Yin"
+date: "`r format(Sys.Date(), '%Y-%m-%d')`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+```
+
+# Introduction and Theoretical Motivation
+
+Financial markets respond to political information, and a president’s communication style and policy uncertainty can influence market behavior. This study investigates how President Donald Trump’s presidency – characterized by unprecedented use of Twitter and unpredictable policy signals – affected U.S. stock market volatility and trading volume relative to other recent presidents.
+
+This research is grounded in three complementary perspectives:
+
+- Efficient Market Hypothesis (EMH): In semi-strong form EMH, markets rapidly incorporate publicly available information into prices. New information (or uncertainty) introduced by presidential communications should be swiftly reflected in price changes and volatility. If Trump’s term exhibited consistently higher volatility, an EMH lens suggests it may be due to more frequent or impactful information shocks (e.g., policy surprises or tweets) hitting the market, rather than markets being irrational.
+
+- Political Uncertainty Theory: Greater uncertainty about government actions increases risk premiums and market volatility. Under this theory, Trump’s unpredictable policy shifts (trade tariffs, deregulation, etc.) and less conventional communication would elevate perceived political uncertainty, pushing up stock return volatilities. We expect Trump’s tenure – with high policy turnover and unusual information flow – to align with this theory.
+
+- Behavioral Finance: Investor sentiment and attention play a role in market volatility. President Trump’s personal and informal use of Twitter was unprecedented and likely grabbed investors’ attention in real time. Attention-grabbing, salient news can trigger overreaction or herding, contributing to short-lived volatility spikes. Trump’s frequent tweets and outspoken style may have amplified sentiment-driven trading and volatility beyond what fundamentals alone would justify – a dynamic this study will investigate.
+
+Research aim: discern whether observed market effects under Trump were a rational response to information flow (EMH), a premium for heightened uncertainty (political risk), or partly an outcome of investor behavioral responses to an unconventional political communication channel.
+
+# Research Questions and Hypotheses
+
+We refine the research focus into clear, testable questions and hypotheses. All key terms (volatility, volume, etc.) are operationalized with concrete measures (defined in *Data Sources*).
+
+Research Questions
+
+1. Comparative Market Volatility: Did U.S. stock market volatility and trading volume during President Trump’s term (2017–2021) significantly exceed those observed under other recent administrations (e.g., Clinton, Bush, Obama)?  
+2. Sector-Specific Effects: Were certain industries (especially trade-exposed or deregulation-sensitive sectors) more volatile under Trump relative to defensive sectors, and were these sectoral volatility and volume patterns markedly different than under previous presidents?  
+3. Communication-Driven Market Reactions: How did President Trump’s direct communications (particularly Twitter posts) impact short-term market volatility and volume? Did market-moving tweets trigger immediate volatility or volume surges that help explain the overall differences in his term?
+
+Hypotheses
+
+- H1 (Higher Overall Volatility): The average stock market volatility during Trump’s presidency was significantly higher than during the Clinton, Bush, and Obama presidencies. Volatility will be measured by the VIX index level and the realized standard deviation of daily S&P 500 returns.
+
+- H2 (Higher Trading Volume): Average market trading volume was higher under Trump than under prior administrations. Additionally, the frequency of extreme volume days (e.g., daily volume above the 95th percentile of the pre-2017 distribution) was greater during Trump’s term.
+
+- H3 (Sector Disparities): Trade- and deregulation-sensitive sectors (e.g., technology, industrials, financials) experienced larger increases in volatility and volume during Trump’s term *relative to*: (a) more defensive sectors (e.g., consumer staples, utilities) in the same period, and (b) the same sectors’ performance under previous presidents.
+
+- H4 (Impact of Presidential Tweets): Market-related communications from President Trump – in particular, tweets mentioning companies, policies, or economic issues – caused significant short-term market reactions, evidenced by abnormal returns, volatility jumps, or unusual trading volume immediately following the tweet.
+
+# Data Sources and Availability
+
+To address the research questions, we will use publicly accessible or widely available datasets that capture both presidential communications and high-frequency market metrics. All data are appropriate and feasible to obtain:
+
+- Presidential Twitter Data: The Trump Twitter Archive (public archive of @realDonaldTrump tweets, including deleted tweets), providing timestamps and text from 2009–2021. This supports event identification and intensity measures (e.g., daily count of market-relevant tweets).
+
+- Intraday Market Data (WRDS TAQ): Trades and Quotes (TAQ) data via WRDS to obtain tick or minute-level prices and volumes for major indices (e.g., SPY, ES futures) and selected stocks/sector ETFs around events. This enables precise measurement of intraday abnormal returns and volumes around tweets or policy announcements.
+
+- Daily Market Data (WRDS/CRSP and Public Sources):
+  - Volatility Measures: Daily VIX (CBOE Volatility Index) and realized volatility (e.g., daily standard deviation of 5-minute S&P 500 returns).
+  - Index and Sector Series: Daily S&P 500 (or CRSP value-weighted market index) returns and volumes, plus sector indices/ETFs for trade-sensitive vs. defensive comparisons.
+  - Individual Stocks: As-needed for tweet-targeted firms.
+
+- Political/Economic Controls:
+  - Economic Policy Uncertainty (EPU) Index (publicly downloadable) as a macro-control for background policy uncertainty.
+  - Macro/Crisis Dummies (e.g., COVID-19 period) to avoid attributing crisis-driven volatility to presidential effects.
+  - Major Political Events (Pre-2017): Selected non-Twitter political events for earlier presidencies to provide limited comparative context (e.g., major speeches/announcements).
+
+All of the above are accessible either publicly (e.g., Twitter archive, EPU, VIX) or via WRDS (TAQ, CRSP, sector/industry portfolios). This ensures replicability and practical feasibility.
+
+# Methodology and Analysis Plan
+
+We combine event studies, time-series/panel regressions, and GARCH-family models to capture both short-term reactions and longer-term regime differences.
+
+## Event Study (Short-Term Impact of Tweets)
+
+- Identify market-relevant tweets from the Trump archive (company mentions, trade policy, macro comments).  
+- Align tweet timestamps with intraday TAQ data for affected assets (targeted stocks, SPY/ES).  
+- Compute abnormal returns (AR) in a tight window (e.g., −30 to +30 minutes) using a benchmark (market model or non-event baseline) and abnormal volume relative to typical time-of-day volume.  
+- Aggregate across events and test for mean CAR and abnormal volume significance.  
+- For comparison, analyze a small set of major political announcements under prior presidents.
+
+## Time-Series and Panel Regressions (Presidency-Level Effects)
+
+- Volatility Regression: Model monthly average VIX or realized volatility as:
+  
+  \[ \text{Volatility}_t = \alpha + \beta_1 D_{\text{Trump},t} + \beta_2 X_t + \varepsilon_t, \]
+  
+  where \(D_{\text{Trump},t}\) is a Trump-term dummy and \(X_t\) includes controls (EPU, crisis dummies). Also run models with dummies for each presidency to compare coefficients.
+
+- Volume Regression: Regress log daily trading volume on presidency dummies and controls; also model an indicator for extreme volume days (e.g., logistic regression).
+
+- Sector Difference-in-Differences: Panel model of sector-by-day volatility/volume with interaction:
+  
+  \[ \text{Volatility}_{i,t} = \gamma_0 + \gamma_1 D_{\text{Trump},t} + \gamma_2 D_{\text{Trade},i} + \gamma_3 (D_{\text{Trump},t} \times D_{\text{Trade},i}) + \text{FE} + u_{i,t}, \]
+  
+  where \(D_{\text{Trade},i}=1\) for trade-exposed sectors; \(\gamma_3>0\) supports H3.
+
+- Use robust SEs; include fixed effects as appropriate; conduct robustness checks (e.g., excluding COVID crash).
+
+## Volatility Modeling (GARCH Family)
+
+- Estimate GARCH(1,1) on daily returns for 1993–2021 with a Trump-term dummy in the variance equation to test for a higher unconditional variance during the Trump era.  
+- Consider EGARCH/GJR-GARCH to assess asymmetry (larger volatility response to negative news).  
+- Optionally include a tweet-day indicator as an exogenous variance regressor to test whether days with market-relevant tweets exhibit higher conditional volatility.
+
+# Expected Findings and Implications
+
+Expected Findings:  
+- Higher Baseline Volatility: Trump’s term shows significantly higher average volatility (VIX/realized) even after controls.  
+- Increased Trading Activity: Modestly higher average volume and more frequent extreme volume days.  
+- Sectoral Divergence: Trade-exposed sectors display larger volatility/volume increases relative to defensive sectors (significant \(\gamma_3\)).  
+- Tweet Effects: Event studies reveal immediate abnormal returns, volume surges, and volatility jumps following market-relevant tweets, with no similar effect for prior presidents.
+
+Implications:  
+- Political Risk: The *style and channel* of presidential communication can itself be a risk factor. Social-media-driven surprises may warrant a communications-risk premium.  
+- Market Efficiency vs. Behavior: Rapid reactions are consistent with EMH, but persistence/overshoot would highlight behavioral dynamics (attention, sentiment).  
+- Policy/Regulatory Considerations: Direct, informal statements by public officials can move markets; guidelines for market-sensitive communications may merit consideration.  
+- Investor Practice: Incorporate leader-communications monitoring into risk management; hedge sector-specific political risks; account for tweet risk in volatility models.
+
+# Conclusion
+
+This proposal articulates a theoretically grounded, testable study on how Trump’s communication style and policy uncertainty affected U.S. market volatility and trading activity, compared to earlier presidencies. The plan leverages public archives and WRDS data, applying event studies, regressions, and GARCH models to test clearly defined hypotheses. Findings will clarify how modern political communication intertwines with market stability and inform both scholarly debates on political risk and practical risk management.
+
